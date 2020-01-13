@@ -5,6 +5,7 @@ Class definition of YOLO_v3 style detection model on image and video
 
 import colorsys
 import os
+import warnings
 from timeit import default_timer as timer
 
 import numpy as np
@@ -17,6 +18,17 @@ from yolo3.model import yolo_eval, yolo_body, tiny_yolo_body
 from yolo3.utils import letterbox_image
 import os
 from keras.utils import multi_gpu_model
+
+
+class MultipleBoxes(Exception):
+
+    def __init__(self, message):
+        self.message = message
+
+class NoBoxes(Exception):
+
+    def __init__(self, message=None):
+        self.message = message
 
 class YOLO(object):
     _defaults = {
@@ -166,6 +178,50 @@ class YOLO(object):
         print(end - start)
         return image
 
+    def get_box(self, image):
+        start = timer()
+
+        if self.model_image_size != (None, None):
+            assert self.model_image_size[0]%32 == 0, 'Multiples of 32 required'
+            assert self.model_image_size[1]%32 == 0, 'Multiples of 32 required'
+            boxed_image = letterbox_image(image, tuple(reversed(self.model_image_size)))
+        else:
+            new_image_size = (image.width - (image.width % 32),
+                              image.height - (image.height % 32))
+            boxed_image = letterbox_image(image, new_image_size)
+        image_data = np.array(boxed_image, dtype='float32')
+
+        image_data /= 255.
+        image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
+
+        out_boxes, out_scores, out_classes = self.sess.run(
+            [self.boxes, self.scores, self.classes],
+            feed_dict={
+                self.yolo_model.input: image_data,
+                self.input_image_shape: [image.size[1], image.size[0]],
+                K.learning_phase(): 0
+            })
+
+        n_boxes = len(out_boxes),
+        
+
+        if len(out_boxes) > 1:
+            print('Found {} boxes. Scores: {}'.format(n_boxes, out_scores))
+        
+        if not len(out_boxes):
+            raise NoBoxes()
+    
+        box = out_boxes[0]
+
+        top, left, bottom, right = box
+        top = max(0, np.floor(top + 0.5).astype('int32'))
+        left = max(0, np.floor(left + 0.5).astype('int32'))
+        bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
+        right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
+
+        end = timer()
+        return top, left, bottom, right
+
     def close_session(self):
         self.sess.close()
 
@@ -209,4 +265,3 @@ def detect_video(yolo, video_path, output_path=""):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     yolo.close_session()
-
