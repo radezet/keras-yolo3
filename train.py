@@ -4,16 +4,17 @@ Retrain the YOLO model for your own dataset.
 
 import numpy as np
 import keras.backend as K
-from keras.layers import Input, Lambda
-from keras.models import Model
-from keras.optimizers import Adam
-from keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
+from tensorflow.keras.layers import Input, Lambda
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
+
 
 from .yolo3.model import preprocess_true_boxes, yolo_body, tiny_yolo_body, yolo_loss
 from .yolo3.utils import get_random_data
 
 
-def _main(annotation_path, classes_path, anchors_path, log_dir='logs/000/'):
+def _main(annotation_path, classes_path, anchors_path, log_dir='logs/000/', weights_path='model_data/yolo_weights.h5'):
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
     anchors = get_anchors(anchors_path)
@@ -23,10 +24,10 @@ def _main(annotation_path, classes_path, anchors_path, log_dir='logs/000/'):
     is_tiny_version = len(anchors)==6 # default setting
     if is_tiny_version:
         model = create_tiny_model(input_shape, anchors, num_classes,
-            freeze_body=2, weights_path='model_data/tiny_yolo_weights.h5')
+            freeze_body=2, weights_path=weights_path)
     else:
         model = create_model(input_shape, anchors, num_classes,
-            freeze_body=2, weights_path='model_data/yolo_weights.h5') # make sure you know what you freeze
+            freeze_body=2, weights_path=weights_path) # make sure you know what you freeze
 
     logging = TensorBoard(log_dir=log_dir)
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
